@@ -12,29 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#ifdef _WIN32
-#include "getopt.h"
-#elif defined(_AIX)
-#include "getopt.h"
-#include <unistd.h>
-#else
 #include <getopt.h>
-#endif
 
+#include <string>
 #include "test.h"
-#include "line_printer.h"
-
-using namespace std;
 
 struct RegisteredTest {
   testing::Test* (*factory)();
   const char *name;
   bool should_run;
 };
+
 // This can't be a vector because tests call RegisterTest from static
 // initializers and the order static initializers run it isn't specified. So
 // the vector constructor isn't guaranteed to run before all of the
@@ -42,7 +34,6 @@ struct RegisteredTest {
 static RegisteredTest tests[10000];
 testing::Test* g_current_test;
 static int ntests;
-static LinePrinter printer;
 
 void RegisterTest(testing::Test* (*factory)(), const char* name) {
   tests[ntests].factory = factory;
@@ -50,7 +41,14 @@ void RegisterTest(testing::Test* (*factory)(), const char* name) {
 }
 
 namespace {
-string StringPrintf(const char* format, ...) {
+
+void PrintOnNewLine(const std::string& to_print) {
+  const char* data = &to_print[0];
+  size_t size = to_print.size();
+  fwrite(data, 1, size, stdout);
+}
+
+std::string StringPrintf(const char* format, ...) {
   const int N = 1024;
   char buf[N];
 
@@ -121,7 +119,7 @@ bool ReadFlags(int* argc, char*** argv, const char** test_filter) {
 bool testing::Test::Check(bool condition, const char* file, int line,
                           const char* error) {
   if (!condition) {
-    printer.PrintOnNewLine(
+    PrintOnNewLine(
         StringPrintf("*** Failure in %s:%d\n%s\n", file, line, error));
     failed_ = true;
   }
@@ -146,9 +144,8 @@ int main(int argc, char **argv) {
 
     ++tests_started;
     testing::Test* test = tests[i].factory();
-    printer.Print(
-        StringPrintf("[%d/%d] %s", tests_started, nactivetests, tests[i].name),
-        LinePrinter::ELIDE);
+    PrintOnNewLine(
+        StringPrintf("[%d/%d] %s\n", tests_started, nactivetests, tests[i].name));
     test->SetUp();
     test->Run();
     test->TearDown();
@@ -157,6 +154,6 @@ int main(int argc, char **argv) {
     delete test;
   }
 
-  printer.PrintOnNewLine(passed ? "passed\n" : "failed\n");
+  PrintOnNewLine(passed ? "passed\n" : "failed\n");
   return passed ? EXIT_SUCCESS : EXIT_FAILURE;
 }
